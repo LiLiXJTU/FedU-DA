@@ -1,0 +1,18 @@
+[INFO](2023/06/09/ 11:53:25 AM) 
+[WELCOME] Unfolding configurations...!
+[INFO](2023/06/09/ 11:53:25 AM) {'global_config': {'seed': 500, 'device': 'cuda:0', 'is_mp': True}}
+[INFO](2023/06/09/ 11:53:25 AM) {'data_config': {'data_path': './data/', 'save_img_path': '/mnt/sda/li/', 'dataset_name': 'MNIST', 'num_shards': 200, 'iid': False}}
+[INFO](2023/06/09/ 11:53:25 AM) {'fed_config': {'C': 0.1, 'K': 3, 'R': 20, 'E': 10, 'B': 32, 'criterion': 'DiceLoss', 'optimizer': 'torch.optim.Adam'}}
+[INFO](2023/06/09/ 11:53:25 AM) {'optim_config': {'lr': '2e-4', 'momentum': 0.9}}
+[INFO](2023/06/09/ 11:53:25 AM) {'init_config': {'init_type': 'xavier', 'init_gain': 1.0, 'gpu_ids': [0, 1, 2]}}
+[INFO](2023/06/09/ 11:53:25 AM) {'model_config': {'name': 'UNet', 'in_channels': 1, 'num_classes': 4}}
+[INFO](2023/06/09/ 11:53:25 AM) {'log_config': {'log_path': './log/06.09_11h53/', 'log_name': 'FL.log', 'tb_port': 5252, 'tb_host': '0.0.0.0'}}
+[INFO](2023/06/09/ 11:53:29 AM) [Round: 0000] ...successfully initialized model (# parameters: 7765508)!
+[INFO](2023/06/09/ 11:53:29 AM) [Round: 0000] ...successfully created all 3 clients!
+[INFO](2023/06/09/ 11:53:29 AM) [Round: 0000] ...successfully finished setup of all 3 clients!
+[INFO](2023/06/09/ 11:53:29 AM) [Round: 0000] ...successfully transmitted models to all 3 clients!
+[INFO](2023/06/09/ 11:53:29 AM) [Round: 0001] Select clients...!
+[INFO](2023/06/09/ 11:53:29 AM) [Round: 0001] ...successfully transmitted models to 3 selected clients!
+[INFO](2023/06/09/ 11:53:29 AM) [Round: 0001] Start updating selected client 0000...!
+[INFO](2023/06/09/ 11:53:29 AM) [Round: 0001] Start updating selected client 0001...!
+[INFO](2023/06/09/ 11:53:30 AM) [Round: 0001] Start updating selected client 0002...!

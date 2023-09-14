@@ -1,0 +1,51 @@
+global_config:
+  seed: 500
+  device: "cuda"
+  is_mp: True
+---
+data_config:
+  data_path: "./data/"
+  #save_img_path: "/mnt/sda/li/"
+  save_img_path: "./"
+  dataset_name: "MNIST"
+  num_shards: 200
+  iid: False
+---
+fed_config:
+  #suijilv
+  C: 0.1
+  #client_num
+  K: 3
+  #tongxin_times
+  R: 30
+  #local_train_times
+  E: 20
+  B: 16
+  #criterion: torch.nn.CrossEntropyLoss
+  criterion: DiceLoss
+  optimizer: torch.optim.Adam
+---
+optim_config:
+  lr: 1e-5
+  momentum: 0.9
+---
+init_config:
+  init_type: "xavier"
+  init_gain: 1.0
+  gpu_ids: [0, 1, 2]
+---
+model_config:
+  #name: TwoNN
+  #in_features: 784
+  #num_hiddens: 200
+  #num_classes: 10
+
+  name: UNet
+  in_channels: 1
+  num_classes: 5
+---
+log_config:
+  log_path: './log/'
+  log_name:  "FL.log"
+  tb_port: 5252
+  tb_host: "0.0.0.0"
