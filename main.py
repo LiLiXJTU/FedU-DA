@@ -29,7 +29,7 @@ if __name__ == "__main__":
     log_config["log_path"] =log_config["log_path"]  + time.strftime('%m.%d_%Hh%M') +'/'
 
     # initiate TensorBaord for tracking losses and metrics
-    #writer = SummaryWriter(log_dir=log_config["log_path"], filename_suffix="FL")
+    writer = SummaryWriter(log_dir=log_config["log_path"], filename_suffix="FL")
     tb_thread = threading.Thread(
         target=launch_tensor_board,
         args=([log_config["log_path"], log_config["tb_port"], log_config["tb_host"]])
@@ -38,11 +38,11 @@ if __name__ == "__main__":
 
     # set the configuration of global logger
     logger = logging.getLogger(__name__)
-    # logging.basicConfig(
-    #     filename=os.path.join(log_config["log_path"], log_config["log_name"]),
-    #     level=logging.INFO,
-    #     format="[%(levelname)s](%(asctime)s) %(message)s",
-    #     datefmt="%Y/%m/%d/ %I:%M:%S %p")
+    logging.basicConfig(
+        filename=os.path.join(log_config["log_path"], log_config["log_name"]),
+        level=logging.INFO,
+        format="[%(levelname)s](%(asctime)s) %(message)s",
+        datefmt="%Y/%m/%d/ %I:%M:%S %p")
     
     # display and log experiment configuration
     message = "\n[WELCOME] Unfolding configurations...!"
@@ -52,8 +52,8 @@ if __name__ == "__main__":
         print(config); logging.info(config)
     print()
 
-    # initialize federated learning
-    central_server = Server(model_config, global_config, data_config, init_config, fed_config, optim_config)
+    # initialize federated learning 
+    central_server = Server(writer, model_config, global_config, data_config, init_config, fed_config, optim_config)
     # central_server = Local(writer, model_config, global_config, data_config, init_config, fed_config, optim_config)
     """Set up all configuration for federated learning."""
     central_server.setup()

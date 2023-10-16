@@ -1,14 +1,18 @@
 import gc
 import pickle
 import logging
+from copy import deepcopy, copy
+
 import numpy as np
-import torch
 from torch.utils.data import DataLoader
 from local.fusiontrans import UFusionNet
-from src.loss import DiceLoss, MultiClassDiceLoss, Focal_Loss,FocalLoss_Ori,Marginal_Loss
-from src.utils import save_on_batch
+from src.loss import DiceLoss, MultiClassDiceLoss, Focal_Loss, FocalLoss_Ori, Marginal_Loss
+from src.utils import save_on_batch, sigmoid_rampup
 from PIL import Image
+import torch
+import torch.nn.functional as F
 logger = logging.getLogger(__name__)
+torch.autograd.set_detect_anomaly(True)
 
 
 # def dice_show(preds, masks, dataloader):
@@ -118,6 +122,7 @@ class Client(object):
         self.__model = None
         self.save_img_path = save_img_path
 
+
     @property
     def model(self):
         """Local model getter for parameter aggregation."""
@@ -143,37 +148,82 @@ class Client(object):
         self.optimizer = client_config["optimizer"]
         self.optim_config = client_config["optim_config"]
 
+
     def client_update(self,idx):
         """Update local model using local dataset."""
         self.model.train()
         self.model.to(self.device)
+        if idx==0:
+            self.ema_model = deepcopy(self.model)
+            for param in self.ema_model.parameters():
+                param.detach_()
+            self.ema_model.to(self.device)
+            self.ema_model.eval()
         client_train_losses =[]
         optimizer = eval(self.optimizer)(self.model.parameters(), lr=2e-4,betas=(0.9, 0.999), weight_decay=5e-4)
-        # optimizer =self.optimizer
         for e in range(self.local_epoch):
             for dataset, labelName in self.dataloader:
-                #data, labels = data.float().to(self.device), labels.long().to(self.device)
                 data = dataset['image'].float().to(self.device)
                 labels = dataset['label'].float().to(self.device)
-
+                if idx==0:
+                    with torch.no_grad():
+                        ema_output = self.ema_model(data.clone())
+                        ema_output_soft = torch.softmax(ema_output, dim=1)
+                    # T = 8
+                    # data_batch_r = data.clone().repeat(2, 1, 1, 1)
+                    # stride = data_batch_r.shape[0] // 2
+                    # preds = torch.zeros([stride * T, 5, 224, 224]).cuda()
+                    # for i in range(T // 2):
+                    #     #加上噪声
+                    #     ema_inputs = data_batch_r + torch.clamp(torch.randn_like(data_batch_r) * 0.1, -0.2, 0.2)
+                    #     with torch.no_grad():
+                    #         preds[2 * stride * i:2 * stride * (i + 1)] = self.ema_model(ema_inputs)
+                    # #生成4个预测值，有复制的一个
+                    # preds = F.softmax(preds, dim=1)
+                    # preds = preds.reshape(T, stride, 5, 224, 224)
+                    # preds = torch.mean(preds, dim=0)  # (batch, 2, 112,112,80)
+                    # #不确定度
+                    # uncertainty = -1.0 * torch.sum(preds * torch.log(preds + 1e-6), dim=1,
+                    #                                keepdim=True)  # (batch, 1, 112,112,80)
                 optimizer.zero_grad()
                 outputs = self.model(data)
                 outputssoft = torch.softmax(outputs, dim=1)
-                #outputs = torch.max(outputs, dim=1).values.unsqueeze(1)
-                #outputs = torch.argmax(outputs,dim=1)
-                #outputs = outputs.data.max(1)[1]
-                # img_path = './train_img/'
-                # save_on_batch(data, labels, outputssoft, labelName, img_path)
-                # mDiceLoss, mDice = MultiClassDiceLoss()(outputssoft, labels)
-                # floss = FocalLoss_Ori()(outputs,labels)
-                # loss = mDiceLoss+floss
-                l_ce,l_dice = Marginal_Loss()(outputssoft,labels,idx)
-                print('l_dice',l_dice.item())
-                loss = l_ce+l_dice
-                print('loss', loss.item())
-                loss.requires_grad_(True)
+                if idx==0:
+                    weights = [0, 1, 1, 0, 0]
+                    ema_l_dice, ema_mDice = MultiClassDiceLoss()(outputssoft, labels, idx,weights)
+                    #consistency_dist
+                    consistency_loss = F.mse_loss(outputssoft, ema_output_soft)
+                    print(consistency_loss,'consistency_loss')
+                    floss = 0
+                    # w_consistence = (e+0.001)/(self.local_epoch*2)
+                    #
+                    # threshold = (0.75 + 0.25 * sigmoid_rampup(e, self.local_epoch)) * np.log(2)
+                    # mask = (uncertainty < threshold).float()
+                    # consistency_dist = torch.sum(mask * consistency_loss) / (2 * torch.sum(mask) + 1e-16)
+                    mDiceLoss = 1 * ema_l_dice + consistency_loss
+                else:
+                    weights = [1, 1, 1, 1, 1]
+                    mDiceLoss, mDice = MultiClassDiceLoss()(outputssoft, labels,idx,weights)
+                    floss = FocalLoss_Ori()(outputs,labels)
+                loss = mDiceLoss+floss
+                #loss.requires_grad_(True)
                 loss.backward()
                 optimizer.step()
+                # 更新 EMA 模型的参数
+                # 定义 EMA 参数
+                #方案1
+                if idx == 0:
+                    ema_decay = 0.99  # 衰减率
+                    with torch.no_grad():
+                        for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):
+                            ema_param.data.mul_(ema_decay).add_(1 - ema_decay, param.data)
+
+                # if idx == 0:
+                #     ema_decay_origin = 0.99
+                #     ema_decay = min(1 - 1 / (e + 1), ema_decay_origin)
+                #     with torch.no_grad():
+                #         for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):
+                #             ema_param.data.mul_(ema_decay).add_(1 - ema_decay, param.data)
                 client_train_losses.append(loss.item())
                 if self.device == "cuda": torch.cuda.empty_cache()
         self.model.to("cpu")
@@ -243,9 +293,13 @@ class Client(object):
                     img = Image.fromarray(gt_colors)
                     img.save(img_path + labelName[i][:-4] + "_gt.png")
                 #save_on_batch(data, labels, outputssoft, labelName, img_path)
-                mDiceLoss, mDice = MultiClassDiceLoss()(outputssoft, labels)
-                floss = FocalLoss_Ori()(outputs, labels)
-                test_loss = mDiceLoss+floss
+                if client_id==0:
+                    weights=[0,1,1,0,0]
+                else:
+                    weights=[1,1,1,1,1]
+                mDiceLoss, mDice = MultiClassDiceLoss()(outputssoft, labels,client_id,weights)
+                # floss = FocalLoss_Ori()(outputs, labels)
+                test_loss = mDiceLoss
 
                 val_losses.append(test_loss.item())
                 val_Dice.append(mDice.item())
@@ -327,6 +381,53 @@ class Client(object):
 #     dice_pred = 2 * np.sum(tmp_lbl * tmp_3dunet) / (np.sum(tmp_lbl) + np.sum(tmp_3dunet) + 1e-5)
 #     # dice_show = "%.3f" % (dice_pred)
 #     return dice_pred
+
+    # def client_update(self):
+    #     """Update local model using local dataset."""
+    #     self.model.train()
+    #     self.model.to(self.device)
+    #     def create_model(ema=True):
+    #         ema_model = deepcopy(self.model)
+    #         if ema:
+    #             for param in self.ema_model.parameters():
+    #                 param.detach_()
+    #             return ema_model
+    #         self.ema_model = create_model(ema=True)
+    #         for param in self.ema_model.parameters():
+    #             param.detach_()
+    #         self.ema_model.eval()
+    #     client_train_losses =[]
+    #     optimizer = eval(self.optimizer)(self.model.parameters(), lr=2e-4,betas=(0.9, 0.999), weight_decay=5e-4)
+    #     for e in range(self.local_epoch):
+    #         for dataset, labelName in self.dataloader:
+    #             data = dataset['image'].float().to(self.device)
+    #             labels = dataset['label'].float().to(self.device)
+    #             with torch.no_grad():
+    #                 ema_output = self.ema_model(data.clone())
+    #                 ema_output_soft = torch.softmax(ema_output, dim=1)
+    #             optimizer.zero_grad()
+    #             outputs = self.model(data)
+    #             outputssoft = torch.softmax(outputs, dim=1)
+    #             ema_l_dice, ema_mDice = MultiClassDiceLoss()(outputssoft, labels)
+    #             consistency_loss = F.mse_loss(outputssoft, labels)
+    #             mDiceLoss = 1 * ema_l_dice+1 * consistency_loss
+    #             loss = mDiceLoss
+    #             loss.requires_grad_(True)
+    #             loss.backward()
+    #             optimizer.step()
+    #             # 更新 EMA 模型的参数
+    #             # 定义 EMA 参数
+    #             ema_decay = 0.99  # 衰减率
+    #             with torch.no_grad():
+    #                 for ema_param, param in zip(self.ema_model.parameters(), self.model.parameters()):
+    #                     ema_param.data.mul_(ema_decay).add_(1 - ema_decay, param.data)
+    #             client_train_losses.append(loss.item())
+    #             if self.device == "cuda": torch.cuda.empty_cache()
+    #     self.model.to("cpu")
+    #     client_avg_loss = np.average(client_train_losses)
+    #     return client_avg_loss,optimizer
+
+
 
 
 

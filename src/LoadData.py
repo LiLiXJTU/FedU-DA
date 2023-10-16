@@ -35,15 +35,38 @@ def LoadDatasets():
     #             torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     #         ]
     #     )
-    A_path = '/mnt/sda/li/Fed_data/1234/300slices/FLARE22Train_1234/Train_Folder/'
+    #客户端1缺失，FLARE22Train_1234
+    # A_path = '/mnt/sda/li/Fed_data/1234/300slices/FLARE22Train_1234/Train_Folder/'
+    # B_path = '/mnt/sda/li/Fed_data/1234/300slices/TCIA_1234/Train_Folder/'
+    # test_path = '/mnt/sda/li/Fed_data/1234/Synapse_1234/Test_Folder/'
+    # C_path = '/mnt/sda/li/Fed_data/1234/300slices/amoss_1234/Train_Folder/'
+    # # MosMed_path = './data/FLARE_4/Train_Folder/'
+    #
+    # val_A_path = '/mnt/sda/li/Fed_data/1234/300slices/FLARE22Train_1234/Test_Folder/'
+    # val_B_path = '/mnt/sda/li/Fed_data/1234/300slices/TCIA_1234/Test_Folder/'
+    # val_C_path = '/mnt/sda/li/Fed_data/1234/300slices/amoss_1234/Test_Folder/'
+
+    # #客户端2缺失，TCIA_1234
+    # A_path = '/mnt/sda/li/Fed_data/1234/300slices/TCIA_1234/Train_Folder/'
+    # B_path = '/mnt/sda/li/Fed_data/1234/300slices/FLARE22Train_1234/Train_Folder/'
+    # test_path = '/mnt/sda/li/Fed_data/1234/Synapse_1234/Test_Folder/'
+    # C_path = '/mnt/sda/li/Fed_data/1234/300slices/amoss_1234/Train_Folder/'
+    # # MosMed_path = './data/FLARE_4/Train_Folder/'
+    #
+    # val_A_path = '/mnt/sda/li/Fed_data/1234/300slices/TCIA_1234/Test_Folder/'
+    # val_B_path = '/mnt/sda/li/Fed_data/1234/300slices/FLARE22Train_1234/Test_Folder/'
+    # val_C_path = '/mnt/sda/li/Fed_data/1234/300slices/amoss_1234/Test_Folder/'
+
+    #客户端3缺失，amoss_1234
+    A_path = '/mnt/sda/li/Fed_data/1234/300slices/amoss_1234/Train_Folder/'
     B_path = '/mnt/sda/li/Fed_data/1234/300slices/TCIA_1234/Train_Folder/'
     test_path = '/mnt/sda/li/Fed_data/1234/Synapse_1234/Test_Folder/'
-    C_path = '/mnt/sda/li/Fed_data/1234/300slices/amoss_1234/Train_Folder/'
+    C_path = '/mnt/sda/li/Fed_data/1234/300slices/FLARE22Train_1234/Train_Folder/'
     # MosMed_path = './data/FLARE_4/Train_Folder/'
 
-    val_A_path = '/mnt/sda/li/Fed_data/1234/300slices/FLARE22Train_1234/Test_Folder/'
+    val_A_path = '/mnt/sda/li/Fed_data/1234/300slices/amoss_1234/Test_Folder/'
     val_B_path = '/mnt/sda/li/Fed_data/1234/300slices/TCIA_1234/Test_Folder/'
-    val_C_path = '/mnt/sda/li/Fed_data/1234/300slices/amoss_1234/Test_Folder/'
+    val_C_path = '/mnt/sda/li/Fed_data/1234/300slices/FLARE22Train_1234/Test_Folder/'
 
     # A_path = 'D:/new_data/Fed/1234/300slices/FLARE22Train_1234/Train_Folder/'
     # B_path = 'D:/new_data/Fed/1234/300slices/TCIA_1234/Train_Folder/'
@@ -139,20 +162,18 @@ class ImageToImage2D(Dataset):
         tif_mask = tiff.imread(os.path.join(self.output_path, image_filename[: -3] + "tif"))
         #mask = cv2.imread(os.path.join(self.output_path, image_filename[: -3] + "tif"),0)
         mask = cv2.resize(tif_mask,(self.image_size,self.image_size),interpolation = cv2.INTER_NEAREST)
-        # if 'FLARE' in self.output_path:
-        #     mask[mask==1]=0
-        #     mask[mask==2]=0
-        #     mask[mask == 3] = 1
-        #     mask[mask==4]=0
-        # else:
-        #     mask[mask==1]=11
-        #     mask[mask == 3] = 1
-        #     mask[mask == 11] = 3
-
-        mask[mask==1]=11
-        mask[mask == 3] = 1
-        mask[mask == 11] = 3
-
+        if 'amoss' in self.output_path:
+            mask[mask==1]=0
+            mask[mask == 2] = 0
+            mask[mask == 3] = 1
+            mask[mask == 4] = 2
+        else:
+            mask[mask==1]=11
+            mask[mask == 2] = 12
+            mask[mask == 3] = 1
+            mask[mask == 4] = 2
+            mask[mask == 11] = 3
+            mask[mask == 12] = 4
         # correct dimensions if needed
         mask_float = mask.astype('float32')
         sample = {'image': image, 'label': mask_float}

@@ -5,8 +5,8 @@ global_config:
 ---
 data_config:
   data_path: "./data/"
-  #save_img_path: "/mnt/sda/li/"
-  save_img_path: "./"
+  save_img_path: "/mnt/sda/li/"
+  #save_img_path: "./"
   dataset_name: "MNIST"
   num_shards: 200
   iid: False
@@ -20,7 +20,7 @@ fed_config:
   R: 30
   #local_train_times
   E: 20
-  B: 16
+  B: 8
   #criterion: torch.nn.CrossEntropyLoss
   criterion: DiceLoss
   optimizer: torch.optim.Adam

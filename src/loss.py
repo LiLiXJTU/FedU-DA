@@ -2,8 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from medpy.metric.binary import dc
-from torch import Tensor
-from src.dice_score import dice_loss_fn
+
 class DiceLoss(nn.Module):
     def __init__(self):
         super(DiceLoss, self).__init__()
@@ -37,9 +36,10 @@ class MultiClassDiceLoss(nn.Module):
     def __init__(self):
         super(MultiClassDiceLoss, self).__init__()
 
-    def forward(self, input, target, weights=None):
+    def forward(self, input, target, idx,weights):
 
         C = input.shape[1]
+
         target_oh = one_hot_encoder(target.long(), C)
         dice = DiceLoss()
         totalLoss = 0
@@ -47,7 +47,6 @@ class MultiClassDiceLoss(nn.Module):
         totalDice = 0
         # pred = torch.max(input, dim=1).indices.unsqueeze(1)
         # pred_oh = one_hot_encoder(pred.long(), C)
-        #weights = [1,2,1,7,5]
         for i in range(C):
             diceLoss = dice(input[:, i], target_oh[:, i])
             dice_core = 1-diceLoss
@@ -58,7 +57,10 @@ class MultiClassDiceLoss(nn.Module):
             totalLoss = totalLoss + diceLoss
             allLoss.append(diceLoss.item())
         print(allLoss)
-        return totalLoss / C, totalDice / C
+        if idx==0:
+            return totalLoss / (C-3), totalDice / (C-3)
+        else:
+            return totalLoss / C, totalDice / C
         #     totalLoss += diceLoss
         #
         # return totalLoss/C
@@ -150,11 +152,9 @@ class GlobalDiceLoss(nn.Module):
         intersection = (p * t).sum(-1)
         union =  (p * p).sum(-1) + (t * t).sum(-1)
         dice  = 1 - (2*intersection + smooth) / (union +smooth)
-        # print "------",dice.data
 
         loss = dice.mean()
         return loss
-
 
 class Marginal_Loss(nn.Module):
     def __init__(self):
@@ -163,7 +163,7 @@ class Marginal_Loss(nn.Module):
     def forward(self, pred, target, client_id):
         if client_id == 0:
             #0
-            class_flag = [0,1,2,3,4]
+            class_flag = [0,1,2]
             #class_flag = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
             # C = input.shape[1]
         # if client_id == 1:
@@ -185,7 +185,7 @@ class Marginal_Loss(nn.Module):
         #     F.one_hot(target.squeeze(1).to(torch.int64), C).permute(0, 3, 1, 2).float(),
         #     multiclass=True
         # )
-        dice_loss,dice_score = MultiClassDiceLoss()(margin_prob, target)
+        dice_loss,dice_score = MultiClassDiceLoss()(margin_prob, target,client_id)
         margin_log_prob = torch.log(torch.clamp(margin_prob, min=1e-4))
         ce_loss = nn.NLLLoss()(margin_log_prob,target[:,0,:,:].long())
 
@@ -221,68 +221,7 @@ def merge_prob(prob, class_flag):
     margin_prob = torch.cat(merged_prob_list, dim=1)
     return margin_prob
 
-def merge_label(label, class_flag):
-    merged_label = torch.zeros_like(label)
-    cc = 0
-    for c, class_exist in enumerate(class_flag):
-        if c > 0 and class_exist > 0:
-            merged_label[label==class_exist] = c
-            # merged_label[label == c] = cc + 1
-            # cc += 1
-    return merged_label
 
-# def make_onehot(input, cls):
-#     oh_list = []
-#     for c in range(cls):
-#         tmp = torch.zeros_like(input)
-#         tmp[input==c] = 1
-#         oh_list.append(tmp)
-#     oh = torch.cat(oh_list, dim=1)
-#     return oh
-
-class WeightDiceLoss(nn.Module):
-    """Dice loss, need one hot encode input
-    Args:
-        weight: An array of shape [num_classes,]
-        ignore_index: class index to ignore
-        predict: A tensor of shape [N, C, *]
-        target: A tensor of same shape with predict
-        other args pass to BinaryDiceLoss
-    Return:
-        same as BinaryDiceLoss
-    """
-    def __init__(self, weight=None, ignore_index=[], **kwargs):
-        super(WeightDiceLoss, self).__init__()
-        self.kwargs = kwargs
-        if weight is not None:
-            self.weight = weight / weight.sum()
-        else:
-            self.weight = None
-        self.ignore_index = ignore_index
-
-    def forward(self, predict, target, flag=None):
-        assert predict.shape == target.shape, 'predict & target shape do not match'
-        dice = BinaryDiceLoss(**self.kwargs)
-        total_loss = 0
-        total_loss_num = 0
-        allLoss = []
-        for c in range(target.shape[1]):
-            if c not in self.ignore_index:
-                dice_loss = dice(predict[:, c], target[:, c], flag)
-                allLoss.append(dice_loss.item())
-                if self.weight is not None:
-                    assert self.weight.shape[0] == target.shape[1], \
-                        'Expect weight shape [{}], get[{}]'.format(target.shape[1], self.weight.shape[0])
-                    dice_loss *= self.weight[c]
-                total_loss += dice_loss
-                total_loss_num += 1
-        print(allLoss)
-        if self.weight is not None:
-            return total_loss
-        elif total_loss_num > 0:
-            return total_loss/total_loss_num
-        else:
-            return 0
 
 class BinaryDiceLoss(nn.Module):
     """Dice loss of binary class
@@ -405,7 +344,6 @@ class FocalLoss(nn.Module):
             logit = logit.view(-1, logit.size(-1))
         target = torch.squeeze(target, 1)
         target = target.view(-1, 1)
-        # print(logit.shape, target.shape)
         #
         alpha = self.alpha
 
